@@ -38,7 +38,7 @@ st.markdown("""
         color: #a7ffeb;
     }
     </style>
-""", unsafe_allow_headers=True)
+""", unsafe_allow_html=True)
 
 st.title("☀️ GreenCruise AI")
 st.subheader("Mobile Solar & PPA Feasibility Modeler")
