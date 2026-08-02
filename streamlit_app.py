@@ -1,5 +1,17 @@
 import streamlit as st
 import requests
+import io
+
+# Try to import docx, if not present, graceful fallback
+try:
+    import docx
+    from docx.shared import Inches, Pt, RGBColor
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+    DOCX_AVAILABLE = True
+except ImportError:
+    DOCX_AVAILABLE = False
 
 # Set page configuration to be mobile-friendly and beautiful
 st.set_page_config(
@@ -31,16 +43,142 @@ st.markdown("""
         background-color: #00897b;
         color: white;
     }
-    .report-box {
-        background-color: #12221c;
-        padding: 20px;
-        border-radius: 10px;
-        border-left: 5px solid #00bfa5;
-        font-family: monospace;
-        color: #a7ffeb;
-    }
     </style>
 """, unsafe_allow_html=True)
+
+# Helper function to set cell background in Word
+def set_cell_background(cell, color_hex):
+    try:
+        tcPr = cell._element.get_or_add_tcPr()
+        shd = OxmlElement('w:shd')
+        shd.set(qn('w:val'), 'clear')
+        shd.set(qn('w:color'), 'auto')
+        shd.set(qn('w:fill'), color_hex)
+        tcPr.append(shd)
+    except Exception:
+        pass
+
+# Helper to generate DOCX file in-memory
+def generate_docx_in_memory(address, system_size_kw, current_rate_kwh, annual_kwh, grid_annual_cost, ppa_rate, ppa_annual_cost, annual_savings, co2_saved_tons, tax_deduction, reap_grant, total_incentives):
+    doc = docx.Document()
+    
+    # Font Style
+    style = doc.styles['Normal']
+    font = style.font
+    font.name = 'Arial'
+    font.size = Pt(11)
+    font.color.rgb = RGBColor(0x33, 0x33, 0x33)
+
+    COLOR_PRIMARY_GREEN = RGBColor(11, 81, 50) 
+    COLOR_GREY = RGBColor(128, 128, 128)
+
+    # Title
+    title_p = doc.add_paragraph()
+    title_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    title_run = title_p.add_run("GREENCRUISE AI\n")
+    title_run.font.size = Pt(24)
+    title_run.font.bold = True
+    title_run.font.color.rgb = COLOR_PRIMARY_GREEN
+    
+    sub_run = title_p.add_run("Commercial Energy & Tax Savings Assessment")
+    sub_run.font.size = Pt(13)
+    sub_run.font.italic = True
+    sub_run.font.color.rgb = COLOR_GREY
+    
+    doc.add_paragraph().add_run("-" * 50).font.color.rgb = COLOR_GREY
+
+    # Metadata
+    meta_p = doc.add_paragraph()
+    meta_p.add_run("Date: ").bold = True
+    meta_p.add_run("August 4, 2026\n")
+    meta_p.add_run("Property Address: ").bold = True
+    meta_p.add_run(f"{address}\n")
+    meta_p.add_run("Prepared For: ").bold = True
+    meta_p.add_run("Partner Client Portfolio\n")
+    meta_p.add_run("Assessed By: ").bold = True
+    meta_p.add_run("Sulejman Mrako, Founder at GreenCruise AI\n")
+
+    # 1. Assessment
+    h1 = doc.add_paragraph()
+    h1_run = h1.add_run("🛰️ 1. PROPERTY & SOLAR POTENTIAL ASSESSMENT")
+    h1_run.font.size = Pt(13)
+    h1_run.font.bold = True
+    h1_run.font.color.rgb = COLOR_PRIMARY_GREEN
+    
+    p1 = doc.add_paragraph()
+    p1.add_run("Our AI-powered satellite mapping system has scanned your roof coordinates and executed a high-precision solar irradiation simulation.\n\n")
+    p1.add_run("• Recommended Solar Array: ").bold = True
+    p1.add_run(f"{system_size_kw} kW DC\n")
+    p1.add_run("• Projected Annual Production: ").bold = True
+    p1.add_run(f"{annual_kwh:,.0f} kWh / year\n")
+
+    # 2. Financials
+    h2 = doc.add_paragraph()
+    h2_run = h2.add_run("💵 2. FINANCIAL BENEFIT ANALYSIS ($0 UPFRONT)")
+    h2_run.font.size = Pt(13)
+    h2_run.font.bold = True
+    h2_run.font.color.rgb = COLOR_PRIMARY_GREEN
+    
+    p2 = doc.add_paragraph()
+    p2.add_run("Under our Zero-CapEx Green Power Initiative, you pay $0 upfront for design, hardware, and installation.\n")
+
+    # Table
+    table = doc.add_table(rows=4, cols=4)
+    headers = ["Metric", "Current Grid Status", "Proposed PPA Solar", "Net Client Savings"]
+    for i, head in enumerate(headers):
+        cell = table.cell(0, i)
+        cell.text = head
+        cell.paragraphs[0].runs[0].font.bold = True
+        cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+        set_cell_background(cell, "0B5132")
+
+    row1 = table.rows[1].cells
+    row1[0].text = "Electricity Rate"
+    row1[1].text = f"${current_rate_kwh:.3f}/kWh"
+    row1[2].text = f"${ppa_rate:.3f}/kWh"
+    row1[3].text = "30% Discount"
+    row1[3].paragraphs[0].runs[0].font.bold = True
+
+    row2 = table.rows[2].cells
+    row2[0].text = "Annual Power Cost"
+    row2[1].text = f"${grid_annual_cost:,.2f}"
+    row2[2].text = f"${ppa_annual_cost:,.2f}"
+    row2[3].text = f"${annual_savings:,.2f} Saved"
+    row2[3].paragraphs[0].runs[0].font.bold = True
+
+    row3 = table.rows[3].cells
+    row3[0].text = "20-Year Cumulative"
+    row3[1].text = f"${grid_annual_cost*20:,.2f}"
+    row3[2].text = f"${ppa_annual_cost*20:,.2f}"
+    row3[3].text = f"${annual_savings*20:,.2f} Saved"
+    row3[3].paragraphs[0].runs[0].font.bold = True
+
+    doc.add_paragraph()
+
+    # 3. Incentives
+    h3 = doc.add_paragraph()
+    h3_run = h3.add_run("🏛️ 3. CERTIFIED GREEN TAX INCENTIVES & GRANTS")
+    h3_run.font.size = Pt(13)
+    h3_run.font.bold = True
+    h3_run.font.color.rgb = COLOR_PRIMARY_GREEN
+    
+    p3 = doc.add_paragraph()
+    p3.add_run("• IRS Section 179D Tax Deduction: ").bold = True
+    p3.add_run(f"Up to ").font.italic = True
+    p3.add_run(f"${tax_deduction:,.2f}").bold = True
+    p3.add_run(" in Year-One accelerated write-offs.\n")
+    p3.add_run("• USDA REAP Cash-Back Grant: ").bold = True
+    p3.add_run(f"Eligible for up to ").font.italic = True
+    p3.add_run(f"${reap_grant:,.2f}").bold = True
+    p3.add_run(" in direct federal grants.\n")
+    p3.add_run("• Net Funding Incentive Package: ").bold = True
+    p3.add_run(f"${total_incentives:,.2f}").bold = True
+
+    # Save to buffer
+    bio = io.BytesIO()
+    doc.save(bio)
+    bio.seek(0)
+    return bio
 
 st.title("☀️ GreenCruise AI")
 st.subheader("Mobile Solar & PPA Feasibility Modeler")
@@ -98,22 +236,21 @@ if st.button("🚀 Generate Savings Report"):
             except Exception:
                 using_local_engine = True
                 
-            # Local Math Fallback Engine (Runs if API fails or network timeout)
+            # Local Math Fallback Engine
             if using_local_engine:
                 try:
                     lat_f = float(lat)
                 except ValueError:
                     lat_f = 40.0
                 
-                # Capacity factor based on latitude
                 if lat_f > 50.0:  # UK / Scotland / Ireland
-                    capacity_factor = 0.105 # ~10.5% capacity factor
+                    capacity_factor = 0.105
                     region_name = "UK / Ireland (Northern Europe)"
                 elif lat_f > 38.0: # US Midwest, Mountain, Pacific Northwest
-                    capacity_factor = 0.145 # ~14.5% capacity factor
+                    capacity_factor = 0.145
                     region_name = "US Midwest / Mountain / Pacific Northwest"
                 else: # US Southern Sun Belt (Texas, Florida)
-                    capacity_factor = 0.178 # ~17.8% capacity factor
+                    capacity_factor = 0.178
                     region_name = "US Southern Sun Belt"
                 
                 annual_kwh = system_size * 8760 * capacity_factor
@@ -128,6 +265,11 @@ if st.button("🚀 Generate Savings Report"):
             
             annual_savings = grid_annual_cost - ppa_annual_cost
             co2_saved_tons = (annual_kwh * 0.85) / 2000
+            
+            # Incentives
+            tax_deduction = system_size * 170.0  # Approx $170 deduction per kW
+            reap_grant = (system_size * 1200.0) * 0.50 # 50% cash-back on solar equipment
+            total_incentives = tax_deduction + reap_grant
             
             # Display Beautiful Results
             st.metric("Estimated Year 1 Savings", f"${annual_savings:,.2f}")
@@ -160,4 +302,22 @@ FINANCIAL ANALYSIS ($0 UPFRONT CAPEX):
 
 👉 100% Funded. $0 Installation. $0 Maintenance."""
             
-            st.text_area("Tap and hold to copy directly to your email or WhatsApp:", value=report_text, height=300)
+            st.text_area("Tap and hold to copy directly to your email or WhatsApp:", value=report_text, height=200)
+
+            # 4. DOWNLOAD WORD DOCUMENT (.docx) DIRECTLY ON MOBILE
+            st.subheader("📥 Download Official Document")
+            if DOCX_AVAILABLE:
+                docx_buffer = generate_docx_in_memory(
+                    display_name, system_size, current_rate, annual_kwh, 
+                    grid_annual_cost, ppa_rate, ppa_annual_cost, annual_savings, 
+                    co2_saved_tons, tax_deduction, reap_grant, total_incentives
+                )
+                
+                st.download_button(
+                    label="📥 Download Word (.docx) Report",
+                    data=docx_buffer,
+                    file_name=f"GreenCruise_Feasibility_Report_{system_size}kW.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                )
+            else:
+                st.warning("Document generator starting up. Please refresh the page in 10 seconds.")
